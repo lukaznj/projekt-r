@@ -649,23 +649,22 @@ def load_and_prep(filename):
 
 # Funkcije za prikupljanje i vizualizaciju rezultata
 
+def zoom_in_on_artefact(y_z, x_z, size, img, recon, title1, title2):
+    h, w = img.shape[:2]
+    y_z = min(y_z, h - size)
+    x_z = min(x_z, w - size)
 
-def collect_results():
-    """
-    Prikuplja sve rezultate evaluacije i vraća ih kao pandas DataFrame.
-    Ova funkcija bi trebala biti pozvana nakon što su svi testovi izvršeni.
-    """
-    import pandas as pd
+    zoom_orig = img[y_z:y_z+size, x_z:x_z+size]
+    zoom_recon = recon[y_z:y_z+size, x_z:x_z+size]
 
-    # Ova funkcija će biti korištena ako korisnik želi ručno prikupiti rezultate
-    # U praksi, rezultati se spremaju automatski kroz evaluate_reconstruction
-    results_list = []
-
-    # Ovdje bi korisnik trebao dodati rezultate ručno ili kroz neki mehanizam
-    # Za sada vraćamo prazan DataFrame sa potrebnim stupcima
-    return pd.DataFrame(columns=["Metoda", "Slika", "PSNR (Y)", "SSIM (Y)", "CIEDE2000 (ΔE*)",
-                                 "PSNR (R)", "PSNR (G)", "PSNR (B)"])
-
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+    ax[0].imshow(cv2.cvtColor(zoom_orig, cv2.COLOR_BGR2RGB))
+    ax[0].set_title(title1)
+    ax[0].axis("off")
+    ax[1].imshow(cv2.cvtColor(zoom_recon, cv2.COLOR_BGR2RGB))
+    ax[1].set_title(title2)
+    ax[1].axis("off")
+    plt.show()
 
 def run_full_benchmark(image_names=None, noise_level=0.02):
     """
