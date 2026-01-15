@@ -10,7 +10,6 @@ from PIL import Image
 
 # Računanje metrika
 
-
 def calculate_ciede2000(rgb1, rgb2):
     """
     Izračunava prosječnu CIEDE2000 razliku boje između dvije RGB slike.
@@ -61,8 +60,8 @@ def evaluate_reconstruction(ref_rgb, recon_rgb, name):
     }
     return results
 
-
 # Simulacija šuma
+
 def simulate_noise(mosaic, noise_level):
     """
     Simulira Gaussov šum za 'slabu rasvjetu'.
@@ -79,8 +78,8 @@ def simulate_noise(mosaic, noise_level):
     return np.clip(noisy_mosaic, 0, 255).astype(mosaic.dtype)
 
 
-# Generiranje mozaika za Quad Bayer
-# Na isti način radi i Tetracell
+# Generiranje mozaika
+
 def generate_quad_bayer_mosaic(rgb_img):
     """
     Simulacija Quad Bayer mozaika (2x2 blokovi iste boje).
@@ -116,9 +115,6 @@ def generate_quad_bayer_mosaic(rgb_img):
     mosaic[3::4, 3::4] = rgb_img[3::4, 3::4, 0]
 
     return mosaic.astype(rgb_img.dtype)
-
-
-# Generiranje mozaika za Nonacell
 
 
 def generate_nonacell_mosaic(rgb_img):
@@ -594,7 +590,6 @@ def demosaic_super_resolution_nonacell(mosaic):
     hybrid = binned_recon_float + alpha * direct_high
 
     return np.clip(hybrid, 0, 255).astype(mosaic.dtype)
-
 
 
 
