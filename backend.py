@@ -616,22 +616,22 @@ def show_image(img, title="Slika", cmap=None, figsize=(10, 8)):
 def show_comparison(ground_truth, mosaiced, demosaiced, title="Usporedba", mosaic_type="Quad Bayer"):
     """Prikazuje ground truth, mozaiciranu i demozaiciranu sliku u jednom redu."""
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    
+
     # Ground Truth
     axes[0].imshow(cv2.cvtColor(ground_truth, cv2.COLOR_BGR2RGB))
     axes[0].set_title(f"Ground Truth\n{title}", fontsize=12)
     axes[0].axis('off')
-    
+
     # Mosaiced (prikaži kao grayscale - mozaik je već 2D niz)
     axes[1].imshow(mosaiced, cmap='gray')
     axes[1].set_title(f"{mosaic_type} Mozaik\n(Vizualizacija)", fontsize=12)
     axes[1].axis('off')
-    
+
     # Demosaiced
     axes[2].imshow(cv2.cvtColor(demosaiced, cv2.COLOR_BGR2RGB))
     axes[2].set_title(f"Demozaicirano\n{title}", fontsize=12)
     axes[2].axis('off')
-    
+
     plt.tight_layout()
     plt.show()
 
@@ -656,78 +656,139 @@ def collect_results():
     Ova funkcija bi trebala biti pozvana nakon što su svi testovi izvršeni.
     """
     import pandas as pd
-    
+
     # Ova funkcija će biti korištena ako korisnik želi ručno prikupiti rezultate
     # U praksi, rezultati se spremaju automatski kroz evaluate_reconstruction
     results_list = []
-    
+
     # Ovdje bi korisnik trebao dodati rezultate ručno ili kroz neki mehanizam
     # Za sada vraćamo prazan DataFrame sa potrebnim stupcima
-    return pd.DataFrame(columns=["Metoda", "Slika", "PSNR (Y)", "SSIM (Y)", "CIEDE2000 (ΔE*)", 
-                                   "PSNR (R)", "PSNR (G)", "PSNR (B)"])
+    return pd.DataFrame(columns=["Metoda", "Slika", "PSNR (Y)", "SSIM (Y)", "CIEDE2000 (ΔE*)",
+                                 "PSNR (R)", "PSNR (G)", "PSNR (B)"])
 
 
-def plot_results_comparison(results_list):
+def run_full_benchmark(image_names=None, noise_level=0.02):
+    """
+    Pokreće SVE metode na SVIM slikama i vraća listu rezultata.
+    Ako `image_names` nije proslijeđen (None) ili je prazan, funkcija će automatski pronaći
+    sve slike u direktoriju `test_images/` i proći kroz njih.
+    """
+    final_results = []
+
+    # Ako nije proslijeđena lista imena, automatski pronađi slike u test_images/
+    if not image_names:
+        import os
+        img_dir = "test_images"
+        valid_exts = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'}
+        try:
+            image_names = sorted([
+                f for f in os.listdir(img_dir)
+                if not f.startswith('.') and os.path.splitext(f)[1].lower() in valid_exts
+            ])
+        except FileNotFoundError:
+            print(f"GREŠKA: Direktorij {img_dir} nije pronađen.")
+            return final_results
+
+    for name in image_names:
+        img = load_and_prep(name)
+        if img is None: continue
+
+        # Generiraj mozaike (jednom za svaku sliku)
+        raw_qb = simulate_noise(generate_quad_bayer_mosaic(img), noise_level)
+        raw_nona = simulate_noise(generate_nonacell_mosaic(img), noise_level)
+
+        # Lista parova (Metoda, Funkcija, Mozaik)
+        test_configs = [
+            ("QB Direct", demosaic_direct_quad_bayer, raw_qb),
+            ("QB Binning", demosaic_virtual_bayer, raw_qb),
+            ("QB Super-Res", demosaic_super_resolution_quad_bayer, raw_qb),
+            ("Nona Direct", demosaic_direct_nonacell, raw_nona),
+            ("Nona Binning", demosaic_virtual_bayer_nonacell, raw_nona),
+            ("Nona Super-Res", demosaic_super_resolution_nonacell, raw_nona)
+        ]
+
+        for label, func, raw_data in test_configs:
+            recon = func(raw_data)
+            res = evaluate_reconstruction(img, recon, label)
+            res['Slika'] = name # Dodajemo ime slike za graf
+            final_results.append(res)
+
+    return final_results
+
+
+def plot_results_comparison(noise_level=0.02):
     """
     Vizualizira usporedbu rezultata svih metoda.
-    
+
+    Umjesto da prima `results_list` kao argument, ova funkcija sada pokreće
+    `run_full_benchmark(noise_level=...)` i koristi dobivene rezultate za crtanje.
+
     Args:
-        results_list: Lista rječnika sa rezultatima (output od evaluate_reconstruction + dodatna polja)
-                      Svaki rječnik mora sadržavati: Metoda, Slika, te sve metrike
+        noise_level: razina simuliranog šuma proslijeđena benchmarku.
+
+    Returns:
+        df, avg_df - pandas DataFrame s detaljnim i sažetim (prosječnim) metrikama.
     """
+    # Pokreni benchmark interno
+    results_list = run_full_benchmark(None, noise_level)
+
+    if not results_list:
+        print("Nema rezultata za prikaz. Provjerite direktorij 'test_images/' i argument noise_level.")
+        return None, None
+
     import pandas as pd
     import seaborn as sns
-    
+
     # Kreiraj DataFrame
     df = pd.DataFrame(results_list)
-    
+
     # 1. Graf: PSNR Comparison
     plt.figure(figsize=(15, 6))
     sns.set_theme(style="whitegrid")
-    
+
     plt.subplot(1, 2, 1)
     sns.barplot(data=df, x="Slika", y="PSNR (Y)", hue="Metoda", palette="viridis")
     plt.title("Usporedba PSNR (Y) po slikama (Više je bolje)")
     plt.xticks(rotation=45, ha='right')
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
-    
+
     # 2. Graf: SSIM Comparison
     plt.subplot(1, 2, 2)
     sns.barplot(data=df, x="Slika", y="SSIM (Y)", hue="Metoda", palette="magma")
     plt.title("Usporedba SSIM (Y) po slikama (Više je bolje)")
     plt.xticks(rotation=45, ha='right')
     plt.legend([],[], frameon=False)  # Hide legend on second plot
-    
+
     plt.tight_layout()
     plt.show()
-    
+
     # 3. Graf: Prosječne performanse
-    avg_df = df.groupby("Metoda")[["PSNR (Y)", "SSIM (Y)", "CIEDE2000 (ΔE*)"]].mean().reset_index()
-    
+    avg_df = df.groupby("Metoda")[ ["PSNR (Y)", "SSIM (Y)", "CIEDE2000 (ΔE*)"] ].mean().reset_index()
+
     plt.figure(figsize=(12, 5))
-    
+
     plt.subplot(1, 2, 1)
     sns.barplot(data=avg_df, x="Metoda", y="PSNR (Y)", hue="Metoda", palette="coolwarm", legend=False)
     plt.title("Prosječan PSNR kroz sve slike")
     plt.xticks(rotation=45, ha='right')
     plt.ylabel("PSNR (dB)")
-    
+
     plt.subplot(1, 2, 2)
     sns.barplot(data=avg_df, x="Metoda", y="SSIM (Y)", hue="Metoda", palette="viridis", legend=False)
     plt.title("Prosječan SSIM kroz sve slike")
     plt.xticks(rotation=45, ha='right')
     plt.ylabel("SSIM")
-    
+
     plt.tight_layout()
     plt.show()
-    
+
     # 4. Tablica: Prosječne vrijednosti
     print("\n" + "="*80)
     print("PROSJEČNE VRIJEDNOSTI METRIKA")
     print("="*80)
     print(avg_df.to_string(index=False))
     print("="*80)
-    
+
     return df, avg_df
 
 
@@ -895,7 +956,7 @@ def create_interactive_demo():
 
     upload_btn.observe(on_upload_change, names="value")
     process_btn.on_click(on_process_click)
-    
+
     # Kreiraj izgled
     box = widgets.VBox([
         widgets.HTML("<h3>Interaktivni Demo:</h3>"),
