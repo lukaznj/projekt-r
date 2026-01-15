@@ -1,3 +1,4 @@
+ipython
 numpy
 opencv-python
 scikit-image
